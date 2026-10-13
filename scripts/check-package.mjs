@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { validatePackage } from './release-check.mjs';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const lab=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'magpie-pack-')));
+const home=path.join(lab,'home'); fs.mkdirSync(home);
+const env={...process.env,HOME:home,USERPROFILE:home,XDG_CONFIG_HOME:path.join(home,'.config'),XDG_CACHE_HOME:path.join(home,'.cache'),XDG_DATA_HOME:path.join(home,'.local/share'),npm_config_cache:path.join(lab,'cache'),npm_config_userconfig:path.join(lab,'npmrc'),npm_config_registry:'https://registry.npmjs.org'};
+const run=(command,args,cwd=root)=>execFileSync(command,args,{cwd,env,encoding:'utf8',timeout:120000});
+try {
+ const [packed]=JSON.parse(run('npm',['pack','--json','--ignore-scripts','--pack-destination',lab]));
+ const manifest=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+ validatePackage(manifest,packed.files.map(file=>file.path));
+ const consumer=path.join(lab,'consumer');fs.mkdirSync(consumer);fs.writeFileSync(path.join(consumer,'package.json'),'{"private":true}');
+ run('npm',['install','--ignore-scripts','--no-audit','--no-fund','--package-lock=false',path.join(lab,packed.filename)],consumer);
+ const installed=path.join(consumer,'node_modules','magpie-claude-science');
+ for (const entry of [manifest.magpie.agent,manifest.magpie.middleware]) assert.ok(fs.statSync(path.resolve(installed,entry)).isFile());
+ const output=run(path.join(consumer,'node_modules','.bin','magpie-claude-science'),['--help'],consumer);
+ assert.match(output,/Usage:/i);
+ const {stageDeployment,verifyDeployment}=await import(pathToFileURL(path.join(installed,'src','deployment.js')).href);
+ const owned=path.join(lab,'owned-runtime');
+ const release=stageDeployment({project:installed,root:owned,node:process.execPath});
+ assert.ok(release.path.startsWith(owned+path.sep),'Release must stay inside the temporary owned root');
+ assert.equal(release.node,path.join(release.path,'bin','node'));
+ assert.ok(fs.statSync(path.join(release.path,'node_modules','smol-toml','package.json')).isFile());
+ fs.rmSync(consumer,{recursive:true,force:true});
+ assert.equal(verifyDeployment(release),true);
+ const deployedOutput=run(release.node,[path.join(release.path,'src','cli.js'),'--help'],lab);
+ assert.match(deployedOutput,/Usage:/i);
+ assert.ok(!fs.existsSync(consumer),'Deployed CLI must not recreate or depend on the npm installation');
+ assert.ok(!fs.existsSync(path.join(home,'.config','magpie')),'Help must not configure Magpie');
+ assert.ok(!fs.existsSync(path.join(home,'Library','LaunchAgents')),'Help must not install a service');
+ if(process.env.PACKAGE_OUTPUT) fs.copyFileSync(path.join(lab,packed.filename),path.resolve(process.env.PACKAGE_OUTPUT));
+ console.log(`PASS: ${packed.filename}; ${packed.files.length} allowlisted files; isolated install; copied Node/dependencies; CLI survives removal of npm installation.`);
+} finally {fs.rmSync(lab,{recursive:true,force:true});}

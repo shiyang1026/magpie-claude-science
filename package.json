@@ -1,0 +1,50 @@
+{
+  "name": "magpie-claude-science",
+  "version": "0.1.0",
+  "description": "Magpie Agent and middleware with an explicit local service installer for Claude Science",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:integration": "node test/integration.mjs",
+    "check:package": "node scripts/check-package.mjs",
+    "check:release": "node scripts/release-check.mjs"
+  },
+  "magpie": {
+    "agent": "./src/agent.js",
+    "middleware": "./src/middleware.js",
+    "options": {
+      "agent": "claude-science",
+      "model": "codex/gpt-6-luna"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "smol-toml": "1.9.1"
+  },
+  "bin": {
+    "magpie-claude-science": "src/cli.js"
+  },
+  "files": [
+    "src/*.js",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "docs/operations.zh-CN.md",
+    "docs/publishing.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shiyang1026/magpie-claude-science.git"
+  },
+  "homepage": "https://github.com/shiyang1026/magpie-claude-science#readme",
+  "bugs": {
+    "url": "https://github.com/shiyang1026/magpie-claude-science/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
