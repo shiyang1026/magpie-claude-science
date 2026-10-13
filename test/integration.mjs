@@ -101,7 +101,7 @@ try {
   await cli(['plugin', 'options', 'magpie-claude-science', JSON.stringify({ agent: 'claude-science', model: 'fake/luna' })]);
   await cli(['provider', 'add', 'fake', 'anthropic=' + upstream, 'key=test', 'models=luna']);
   const agents = await cli(['agents']);
-  assert.match(agents, /claude-science/);
+  assert.match(agents, /^\s*Claude Science\s+/m);
   const plugins = await cli(['plugin', 'list', '--json']);
   assert.match(plugins, /claude-science/);
   await cli(['claude-science', 'fake/luna']);
