@@ -1,5 +1,12 @@
 # 更新日志 / Changelog
 
+## [0.1.2](https://github.com/shiyang1026/magpie-claude-science/compare/v0.1.1...v0.1.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **science:** 修复插件缺少模型配置时请求被错误拒绝 ([325bae3](https://github.com/shiyang1026/magpie-claude-science/commit/325bae3210450c30df8e1d6a9ae40e0fa308cc9d))
+
 ## [0.1.1](https://github.com/shiyang1026/magpie-claude-science/compare/v0.1.0...v0.1.1) (2026-10-13)
 
 
