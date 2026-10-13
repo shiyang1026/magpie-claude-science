@@ -1,5 +1,12 @@
 # 更新日志 / Changelog
 
+## [0.1.3](https://github.com/shiyang1026/magpie-claude-science/compare/v0.1.2...v0.1.3) (2026-10-13)
+
+
+### Bug Fixes
+
+* **setup:** 明确插件安装后的首次初始化步骤 ([f618156](https://github.com/shiyang1026/magpie-claude-science/commit/f618156840f5873ce61a8e52fda5120790c217fb))
+
 ## [0.1.2](https://github.com/shiyang1026/magpie-claude-science/compare/v0.1.1...v0.1.2) (2026-10-13)
 
 
