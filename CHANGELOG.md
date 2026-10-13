@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## [0.1.1](https://github.com/shiyang1026/magpie-claude-science/compare/v0.1.0...v0.1.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **icon:** 补齐 Claude Science 原生图标及版权说明 ([70e620f](https://github.com/shiyang1026/magpie-claude-science/commit/70e620f1c504f51db1a97533b003d13c2b504806))
+* **science:** 修复安装来源切换后接入失效并完善升级恢复 ([ecd636a](https://github.com/shiyang1026/magpie-claude-science/commit/ecd636a24c3319152c1bce7a1a29bf55a3788b38))
+
 ## 0.1.0 (2026-10-13)
 
 ### 新功能

@@ -1,6 +1,6 @@
 {
   "name": "magpie-claude-science",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Magpie Agent and middleware with an explicit local service installer for Claude Science",
   "type": "module",
   "scripts": {
