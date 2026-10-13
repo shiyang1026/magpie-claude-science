@@ -2,7 +2,9 @@
 
 ## 安装与配置
 
-使用官方 Node.js 22/24，启动 Magpie 后执行 `node src/cli.js install`，从现有模型中选择。非交互安装必须提供 `--model`；升级优先保留已选模型。仅在 Magpie 中添加插件不等于完成系统服务初始化。
+使用官方 Node.js 22/24，启动 Magpie 后执行 `npx magpie-claude-science@latest install`（源码目录中可用 `node src/cli.js install`），从现有模型中选择。非交互安装必须提供 `--model`；升级优先保留已选模型。仅在 Magpie 中添加插件不等于完成系统服务初始化。
+
+若首次 Sign in 后出现 `Sign in on the web` / `Paste code instead`，先执行 `npx magpie-claude-science@latest doctor`。未初始化时执行 `install`，成功后重新打开原 App，并关闭旧登录页；已初始化时核对服务状态和 `sciencePort`。不要将重新登录 Anthropic 作为接入步骤。
 
 可用选项：
 
@@ -67,3 +69,5 @@ node src/cli.js uninstall
 Science 的三个模型槽位都映射到 Magpie 当前选择。短对话和协议级工具调用已验证；图片、长会话压缩和完整科研流程尚未验证。Anthropic 托管 MCP、搜索及账号服务不由插件提供，相关 401 日志不代表模型推理一定失败。
 
 本地验证：`npm test`、`npm run check:package`、`npm run test:integration`。GitHub CI 执行同类检查；它使用模拟 Science，不下载或运行用户的真实科研数据。
+
+首次登录的实机验收必须使用独立的 HOME、数据目录和新生成的本地身份，并在无痕窗口或无原有登录状态的独立浏览器会话中打开该测试实例生成的一次性登录链接。确认 Sign in 后进入工作区，而非账号登录页；不能仅检查已有会话或 `/health`。同时检查只安装 Magpie 插件时的初始化提示。测试结束停止测试进程，不清除用户浏览器 Cookie 或真实会话。

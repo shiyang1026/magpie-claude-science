@@ -6,13 +6,21 @@
 [![CI](https://github.com/shiyang1026/magpie-claude-science/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shiyang1026/magpie-claude-science/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/shiyang1026/magpie-claude-science)](https://github.com/shiyang1026/magpie-claude-science/releases)
 
-在 Claude Science 中使用 Magpie 的模型，保留原来的 macOS App 图标。在 **Magpie → Agent → Claude Science** 中选择模型，然后照常打开 Science。
+在 Claude Science 中使用 Magpie 的模型，保留原来的 macOS App 图标。首次使用先完成下方的终端初始化；之后在 **Magpie → Agent → Claude Science** 中切换模型，照常打开 Science。
 
 **实验版。** 包含 Agent 插件、限定作用范围的 middleware，以及需要明确安装的后台服务，无需 CSP。已验证 Science **0.1.60**、Magpie **0.1.1219**。
 
 ## 快速开始
 
-需要 macOS、官方发行的 Node.js 22+，以及已安装的 Claude Science 和 Magpie。启动 Magpie，启用至少一个模型，在本仓库目录中执行：
+需要 macOS、官方发行的 Node.js 22+，以及已安装的 Claude Science 和 Magpie。**只在 Magpie 点击安装插件还不能使用。** 启动 Magpie，启用至少一个模型，结束正在运行的 Science 任务，然后在终端执行（无需下载源码）：
+
+```sh
+npx magpie-claude-science@latest install
+```
+
+按提示选择模型，等终端显示 `Installed` 后，重新打开 **Claude Science.app**，关闭之前的登录页。不要继续使用旧端口的书签。
+
+如果从源码安装，则在本仓库目录中执行：
 
 ```sh
 npm ci --ignore-scripts
@@ -24,6 +32,16 @@ node src/cli.js install
 **仅在 Magpie 中添加插件，不能完成全部安装。** 安装器配置 macOS LaunchAgent，把运行文件、生产依赖及 Node 复制到独立版本目录。后台运行不再依赖 checkout 或 npm 缓存。部分 Homebrew Node 依赖外部动态库，会被拒绝，需改用官方 Node。
 
 打开原来的 **Claude Science.app**。首次 “Sign in” 仅确认本地浏览器会话，无需登录 Anthropic。保持 Magpie 运行，在其 Agent 页面切换模型。
+
+### 点 Sign in 后仍显示 Sign in on the web / Paste code instead
+
+这表示当前页面进入了 Science 的账号登录流程；先检查接入是否完成，不要以浏览器已有登录状态判断安装成功：
+
+```sh
+npx magpie-claude-science@latest doctor
+```
+
+如果提示本地服务未初始化，执行上面的 `install`。如果服务已安装，检查输出中的服务状态和 `sciencePort`，重新打开 App 进入受管服务。仅凭 `localhost:8765` 或其他端口不能判断是否接入成功。如果 `doctor` 仍报错，请提供错误摘要，不要提供令牌、完整私有日志或 `state.json`。
 
 ## 管理
 

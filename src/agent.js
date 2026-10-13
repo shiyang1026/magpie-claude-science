@@ -9,6 +9,7 @@ export const agent = {
   model: 'model',
   dir: '/Applications/Claude Science.app',
   icon: SCIENCE_ICON,
+  notice: '首次使用需在终端运行 / First-time setup: npx magpie-claude-science@latest install — installing the Magpie plugin alone is not enough. After setup, reopen Claude Science.',
 };
 
 export function connect({ gateway, model }) {

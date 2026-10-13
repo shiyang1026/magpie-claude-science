@@ -110,7 +110,7 @@ export function createInstaller(deps={}) {
   async function execute(options){
     if(options.command==='help'){log(help);return;}
     if(options.command==='doctor'){
-      const state=json(stateFile);if(!state){log('Not installed.');return;}
+      const state=json(stateFile);if(!state){log('Local Science service is not initialized. Installing the plugin in Magpie alone does not complete setup.\nKeep Magpie running, then run: npx magpie-claude-science@latest install\nAfter setup succeeds, reopen Claude Science.');return;}
       log(`Runtime: ${state.pluginSpec||state.project}\nModel: ${json(state.agentConfig)?.model||state.model||'(disconnected)'}\nGateway: ${state.gateway||'legacy'}\nService: ${read(state.statusFile)||'(no status)'}\nPrivate logs: ${root}`);
       if(state.deployment){try{verifyDeployment(state.deployment);log('Deployment checksums: OK');}catch(e){log(e.message);}}
       return;

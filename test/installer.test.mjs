@@ -1,5 +1,20 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {spawnSync} from 'node:child_process';
 const project=path.resolve('.');
+test('doctor explains the missing setup after a marketplace-only installation without writing files', async () => {
+  const {createInstaller}=await import('../src/cli.js');
+  const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-first-run-')));
+  try {
+    const registry=path.join(home,'.config/magpie/plugins.json');
+    fs.mkdirSync(path.dirname(registry),{recursive:true});
+    fs.writeFileSync(registry,JSON.stringify({plugins:[{spec:'magpie-claude-science@latest'}]}));
+    const before=fs.readFileSync(registry,'utf8'),output=[];
+    await createInstaller({home,log:line=>output.push(line)}).execute({command:'doctor'});
+    assert.match(output.join('\n'),/npx magpie-claude-science@latest install/);
+    assert.match(output.join('\n'),/Magpie/);
+    assert.equal(fs.readFileSync(registry,'utf8'),before);
+    assert.deepEqual(fs.readdirSync(path.dirname(registry)),['plugins.json']);
+  } finally {fs.rmSync(home,{recursive:true,force:true});}
+});
 test('--help does not create a profile and succeeds cross-platform',()=>{const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-help-')));try{const r=spawnSync(process.execPath,['src/cli.js','--help'],{env:{...process.env,HOME:home},encoding:'utf8'});assert.equal(r.status,0,r.stderr);assert.match(r.stdout,/--model/);assert.deepEqual(fs.readdirSync(home),[]);}finally{fs.rmSync(home,{recursive:true,force:true});}});
 test('install uses stable release; failed upgrade restores previous selection and state',async()=>{const {createInstaller}=await import('../src/cli.js');assert.equal(typeof createInstaller,'function');const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-install-')));const calls=[];let fail=false;const binary=path.join(home,'fake-bin');fs.writeFileSync(binary,'fake',{mode:0o700});const env={PATH:home};const installer=createInstaller({home,project,platform:'darwin',env,node:binary,run:(bin,args)=>{calls.push([bin,...args]);return {status:args[0]==='print'?1:0,stdout:'',stderr:''};},fetch:async url=>({ok:true,json:async()=>url.endsWith('/api/hello')?{name:'magpie'}:{data:[{id:'first'},{id:'second'}]}}),waitHealthy:async()=>{if(fail){fail=false;throw Error('startup failed');}},stopService:async()=>{calls.push(['stop']);},log:()=>{}});try{await installer.execute({command:'install',model:'second',gateway:'http://localhost:4567',magpie:binary,science:binary});const stateFile=path.join(home,'.config/magpie/claude-science-runtime/state.json'),before=fs.readFileSync(stateFile,'utf8'),s=JSON.parse(before);assert.match(s.pluginSpec,/releases\/[a-f0-9]{64}$/);assert.ok(s.node.startsWith(s.pluginSpec));assert.equal(s.model,'second');assert.equal(s.gatewayOverride,true);assert.equal(s.gateway,'http://127.0.0.1:4567');assert.ok(calls.some(c=>c.includes('options')&&c.includes(s.pluginSpec)));fail=true;await assert.rejects(installer.execute({command:'upgrade',model:'first',magpie:binary,science:binary}),/startup failed/);assert.equal(fs.readFileSync(stateFile,'utf8'),before);assert.ok(calls.filter(c=>c.includes('options')).at(-1).at(-1).includes('second'));assert.ok(!fs.existsSync(path.join(home,'.config/magpie/claude-science-runtime/install.lock')));}finally{fs.rmSync(home,{recursive:true,force:true});}});
 test('npm-style symlink entry executes help',()=>{const dir=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-symlink-')));try{const link=path.join(dir,'cli');fs.symlinkSync(path.join(project,'src','cli.js'),link);const r=spawnSync(process.execPath,[link,'--help'],{encoding:'utf8'});assert.equal(r.status,0);assert.match(r.stdout,/Usage:/);}finally{fs.rmSync(dir,{recursive:true,force:true});}});

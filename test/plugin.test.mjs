@@ -18,7 +18,10 @@ function requireHooks() {
 }
 
 test('agent declares the dedicated Science config and installed app', () => {
-  assert.deepEqual(agentModule.agent, {
+  const { notice, ...metadata } = agentModule.agent;
+  assert.match(notice, /npx magpie-claude-science@latest install/);
+  assert.match(notice, /首次|first/i);
+  assert.deepEqual(metadata, {
     id: 'claude-science', name: 'Claude Science', config: '~/.config/magpie/claude-science.json',
     format: 'json', model: 'model', dir: '/Applications/Claude Science.app', icon: SCIENCE_ICON,
   });
