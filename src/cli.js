@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {createInterface} from 'node:readline/promises';
+import {enabledSciencePlugins} from './plugin-identity.js';
 import {makeTicket} from './ticket.js';
 import {managedWrite,restoreAll} from './files.js';
 import {scienceConfig,checkOriginalConfig,launchPlist,label} from './setup.js';
@@ -63,6 +64,8 @@ export function createInstaller(deps={}) {
     const originalDir=path.join(home,'.claude-science'),originalConfig=path.join(originalDir,'config.toml');
     const baseline=previous&&previous.installed!==false?read(path.join(root,'original-config.txt')):read(originalConfig);
     checkOriginalConfig(baseline,originalDir);
+    const registryBefore=json(path.join(configRoot,'plugins.json'));
+    const enabledBefore=enabledSciencePlugins(registryBefore,[previous?.pluginSpec,previous?.project]);
     if(previous)await stop(previous);
     let reserved,switched=false;
     try{
@@ -77,7 +80,7 @@ export function createInstaller(deps={}) {
       if(!previous){const t=makeTicket(undefined,state.token);save(path.join(state.auth,'encryption.key'),Object.entries(t.keys).map(([k,v])=>`${k}=${v}`).join('\n')+'\n');save(path.join(state.auth,'.oauth-tokens',t.account+'.enc'),t.encrypted);}
       save(state.scienceConfig,scienceConfig(baseline,{data:state.data,auth:state.auth,port:state.sciencePort,sandboxPort:state.sandboxPort}));
       save(stateFile,JSON.stringify(state,null,2));switched=true;
-      if(previous&&(previous.pluginSpec||previous.project)!==state.pluginSpec)run(magpie,['plugin','off',previous.pluginSpec||previous.project]);
+      for(const entry of enabledBefore)if(entry.spec!==state.pluginSpec)run(magpie,['plugin','off',entry.spec]);
       select(state);
       if(!previous)run(binary,['stop','--data-dir',originalDir]);
       await reserved.release();reserved=null;
@@ -92,7 +95,14 @@ export function createInstaller(deps={}) {
         if(read(previous.scienceConfig)!==oldScience)save(previous.scienceConfig,oldScience);
         if(oldPlist&&read(plist)!==oldPlist)managedWrite(plist,oldPlist,installJournal);
         const recovered={...previous,magpie:previous.magpie||magpie,model:previousModel,gateway:previous.gateway||gateway,node:previous.node||deps.node||process.execPath};
-        if(previous.installed!==false){select(recovered);launch(recovered);await healthy(recovered);}else{run(magpie,['claude-science','default'],true);restoreAll(installJournal);}
+        if(previous.installed!==false){
+          // Restore the user's actual source instead of resurrecting a removed checkout.
+          if(registryBefore){
+            for(const entry of enabledBefore)run(magpie,['plugin','on',entry.spec]);
+            if(enabledBefore.length)run(magpie,['claude-science',previousModel]);
+          }else select(recovered);
+          launch(recovered);if(!registryBefore||enabledBefore.length)await healthy(recovered);
+        }else{run(magpie,['claude-science','default'],true);restoreAll(installJournal);}
       }else if(switched){run(magpie,['claude-science','default'],true);restoreAll(installJournal);restoreAll(privateJournal);}
       throw error;
     }

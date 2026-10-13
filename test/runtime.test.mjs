@@ -73,3 +73,16 @@ test('shutdown during orphan recovery does not open a bridge after releasing own
   assert.equal(fs.readFileSync(f.state.originalConfig,'utf8'),'# ORIGINAL\n');
  }finally{await f.cleanup();}
 });
+
+test('changing installation source to the official GitHub package keeps Science connected',async()=>{
+ const f=await fixture();try{
+  f.start();await until(()=>f.status().state==='running');const pid=f.status().sciencePid;
+  const spec='https://github.com/shiyang1026/magpie-claude-science';
+  fs.writeFileSync(f.state.pluginsFile,JSON.stringify({plugins:[{spec}]}));
+  await until(()=>f.status().activePluginSpec===spec&&f.status().state==='running');
+  assert.equal(f.status().sciencePid,pid);
+  assert.equal(fs.readFileSync(f.state.originalConfig,'utf8'),'data_dir="managed"\n');
+  fs.writeFileSync(f.state.pluginsFile,JSON.stringify({plugins:[{spec,off:true}]}));
+  await until(()=>f.status().state==='disconnected');assert.equal(fs.readFileSync(f.state.originalConfig,'utf8'),'# ORIGINAL\n');
+ }finally{await f.cleanup();}
+});

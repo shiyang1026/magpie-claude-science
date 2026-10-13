@@ -6,3 +6,42 @@ test('npm-style symlink entry executes help',()=>{const dir=fs.realpathSync(fs.m
 test('lock excludes mutations before touching managed journals',async()=>{const {createInstaller}=await import('../src/cli.js');const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-lock-')));try{const root=path.join(home,'.config/magpie/claude-science-runtime');fs.mkdirSync(root,{recursive:true});fs.writeFileSync(path.join(root,'install.lock'),'existing');const cli=createInstaller({home,platform:'darwin',env:{}});await assert.rejects(cli.execute({command:'uninstall'}),/install.lock/);assert.deepEqual(fs.readdirSync(root),['install.lock']);}finally{fs.rmSync(home,{recursive:true,force:true});}});
 test('upgrade and rollback retain sessions, and reinstall preserves authentication',async()=>{const {createInstaller}=await import('../src/cli.js');const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-rollback-')));try{const source=path.join(home,'source');fs.mkdirSync(path.join(source,'src'),{recursive:true});fs.writeFileSync(path.join(source,'src','runtime.js'),'//one');fs.writeFileSync(path.join(source,'package.json'),'{"type":"module","dependencies":{}}');const binary=path.join(home,'bin');fs.writeFileSync(binary,'fake',{mode:0o700});const installer=createInstaller({home,project:source,platform:'darwin',env:{},node:binary,run:()=>({status:0,stdout:'',stderr:''}),fetch:async url=>({ok:true,json:async()=>url.endsWith('hello')?{name:'magpie'}:{data:[{id:'a'}]}}),stopService:async()=>{},waitHealthy:async()=>{},log:()=>{}});const options={magpie:binary,science:binary,model:'a'};const first=await installer.execute({...options,command:'install'});const encryption=fs.readFileSync(path.join(first.auth,'encryption.key'),'utf8');fs.mkdirSync(first.data,{recursive:true});fs.writeFileSync(path.join(first.data,'session'),'keep');fs.appendFileSync(path.join(source,'src','runtime.js'),'//two');const second=await installer.execute({...options,command:'upgrade'});assert.notEqual(first.deployment.id,second.deployment.id);const restored=await installer.execute({...options,command:'rollback'});assert.equal(restored.deployment.id,first.deployment.id);assert.equal(fs.readFileSync(path.join(first.data,'session'),'utf8'),'keep');await installer.execute({...options,command:'uninstall'});fs.mkdirSync(path.dirname(first.originalConfig),{recursive:true});fs.writeFileSync(first.originalConfig,'user_setting = "preserve-after-uninstall"\n');await installer.execute({...options,command:'install'});assert.match(fs.readFileSync(first.scienceConfig,'utf8'),/preserve-after-uninstall/);assert.match(fs.readFileSync(path.join(path.dirname(installer.stateFile),'original-config.txt'),'utf8'),/preserve-after-uninstall/);assert.equal(fs.readFileSync(path.join(first.auth,'encryption.key'),'utf8'),encryption);}finally{fs.rmSync(home,{recursive:true,force:true});}});
 test('state drift during upgrade preserves user edits and restores old Science configuration',async()=>{const {createInstaller}=await import('../src/cli.js');const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-drift-')));try{const source=path.join(home,'source');fs.mkdirSync(path.join(source,'src'),{recursive:true});fs.writeFileSync(path.join(source,'src','runtime.js'),'//runtime');fs.writeFileSync(path.join(source,'package.json'),'{"dependencies":{}}');const binary=path.join(home,'bin');fs.writeFileSync(binary,'fake',{mode:0o700});const cli=createInstaller({home,project:source,node:binary,platform:'darwin',env:{},run:()=>({status:0}),fetch:async url=>({ok:true,json:async()=>url.endsWith('hello')?{name:'magpie'}:{data:[{id:'a'}]}}),stopService:async()=>{},waitHealthy:async()=>{},log:()=>{}});const options={magpie:binary,science:binary,model:'a'};const state=await cli.execute({...options,command:'install'}),before=fs.readFileSync(state.scienceConfig,'utf8');fs.writeFileSync(cli.stateFile,JSON.stringify({...state,userNote:'preserve'}));await assert.rejects(cli.execute({...options,command:'upgrade',sciencePort:0}),/drift/);assert.equal(JSON.parse(fs.readFileSync(cli.stateFile)).userNote,'preserve');assert.equal(fs.readFileSync(state.scienceConfig,'utf8'),before);}finally{fs.rmSync(home,{recursive:true,force:true});}});
+test('upgrade replaces an enabled GitHub source and failure restores that source without reviving the checkout',async()=>{
+ const {createInstaller}=await import('../src/cli.js');
+ const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'science-source-')));
+ try{
+  const source=path.join(home,'source');fs.mkdirSync(path.join(source,'src'),{recursive:true});
+  fs.writeFileSync(path.join(source,'src/runtime.js'),'//one');fs.writeFileSync(path.join(source,'package.json'),'{"dependencies":{}}');
+  const binary=path.join(home,'bin');fs.writeFileSync(binary,'fake',{mode:0o700});
+  const registryFile=path.join(home,'.config/magpie/plugins.json');let fail=false;
+  const calls=[];
+  const cli=createInstaller({home,project:source,node:binary,platform:'darwin',env:{},
+   run:(bin,args)=>{
+    calls.push(args);
+    if(args[0]==='plugin'&&['add','on','off'].includes(args[1])){
+     const registry=fs.existsSync(registryFile)?JSON.parse(fs.readFileSync(registryFile)): {plugins:[]};
+     let entry=registry.plugins.find(x=>x.spec===args[2]);
+     if(args[1]==='add'&&!entry){entry={spec:args[2]};registry.plugins.push(entry);}
+     if(!entry)throw Error('missing source');
+     if(args[1]!=='add')entry.off=args[1]==='off';
+     fs.writeFileSync(registryFile,JSON.stringify(registry));
+    }
+    return {status:0};
+   },fetch:async url=>({ok:true,json:async()=>url.endsWith('hello')?{name:'magpie'}:{data:[{id:'a'}]}}),stopService:async()=>{},
+   waitHealthy:async()=>{if(fail){fail=false;throw Error('startup failed');}},log:()=>{}});
+  const options={magpie:binary,science:binary,model:'a'};
+  const first=await cli.execute({...options,command:'install'});
+  const github='https://github.com/shiyang1026/magpie-claude-science';
+  fs.writeFileSync(registryFile,JSON.stringify({plugins:[{spec:github}]}));
+  fs.appendFileSync(path.join(source,'src/runtime.js'),'//two');
+  fail=true;calls.length=0;
+  await assert.rejects(cli.execute({...options,command:'upgrade'}),/startup failed/);
+  const registry=JSON.parse(fs.readFileSync(registryFile));
+  assert.equal(registry.plugins.find(x=>x.spec===github).off,false);
+  assert.equal(registry.plugins.filter(x=>!x.off).length,1);
+  assert.ok(!calls.some(args=>args[0]==='plugin'&&args[2]===first.pluginSpec));
+  const second=await cli.execute({...options,command:'upgrade'});
+  const enabled=JSON.parse(fs.readFileSync(registryFile)).plugins.filter(x=>!x.off);
+  assert.deepEqual(enabled.map(x=>x.spec),[second.pluginSpec]);
+ }finally{fs.rmSync(home,{recursive:true,force:true});}
+});

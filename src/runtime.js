@@ -3,6 +3,7 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {createHash,randomBytes} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
+import {enabledSciencePlugins} from './plugin-identity.js';
 import {createBridge,validateConfig} from './bridge.js';
 import {managedWrite,restoreAll} from './files.js';
 import {readProcessIdentity,ownsDaemon,signalOwnedDaemon,acquireRuntimeOwner} from './processes.js';
@@ -24,11 +25,13 @@ export async function runRuntime(state,{pollMs=2000,startTimeoutMs=45000,stopTim
   const owner={pid:process.pid,identity:readProcessIdentity(process.pid)};
   if(!owner.identity)throw Error('Cannot establish runtime process identity');
   let child=null,lease=null,stopping=false,timer=null,inFlight=null,initializing=null,shuttingDown=null,retryAt=0,lastError='';
-  let binaryStamp=null,scienceVersion=null,active=false;
-  function status(value){atomicJSON(state.statusFile,{at:new Date().toISOString(),...owner,pluginSpec,...value});}
+  let binaryStamp=null,scienceVersion=null,active=false,activePluginSpec=null;
+  function status(value){atomicJSON(state.statusFile,{at:new Date().toISOString(),...owner,pluginSpec,activePluginSpec,...value});}
   function selected(){
     const c=readJSON(state.agentConfig),p=readJSON(state.pluginsFile);
-    const entry=p?.plugins?.find(x=>x.spec===pluginSpec);
+    const entries=enabledSciencePlugins(p,[pluginSpec,state.project]);
+    const entry=entries.find(x=>x.spec===pluginSpec)||entries[0];
+    activePluginSpec=entry?.spec||null;
     if(state.installed===false||!entry||entry.off||c?.key!=='magpie-claude-science')throw Error('Science is disconnected in Magpie');
     return validateConfig({...c,gateway:state.gatewayOverride?state.gateway:c.gateway||state.gateway,token:state.token});
   }
