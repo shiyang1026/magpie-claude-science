@@ -1,5 +1,7 @@
 name: Release to npm
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -7,13 +9,140 @@ concurrency:
   group: npm-release
   cancel-in-progress: false
 jobs:
-  validate:
-    if: github.repository == 'shiyang1026/magpie-claude-science'
+  plan:
+    if: github.repository == 'shiyang1026/magpie-claude-science' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      sha: ${{ steps.release.outputs.sha }}
+      pr: ${{ steps.release.outputs.pr }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ github.token }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+  prepare:
+    needs: plan
+    if: ${{ !cancelled() && github.repository == 'shiyang1026/magpie-claude-science' && (needs.plan.result == 'success' || needs.plan.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+      tag: ${{ steps.select.outputs.tag }}
+      sha: ${{ steps.select.outputs.sha }}
+      mode: ${{ steps.select.outputs.mode }}
+      created: ${{ steps.select.outputs.created }}
+      pr_sha: ${{ steps.select.outputs.pr_sha }}
+    steps:
+      - name: Select release or bot release PR for validation
+        id: select
+        env:
+          RELEASE_CREATED: ${{ needs.plan.outputs.release_created }}
+          AUTOMATIC_TAG: ${{ needs.plan.outputs.tag }}
+          AUTOMATIC_SHA: ${{ needs.plan.outputs.sha }}
+          RELEASE_PR: ${{ needs.plan.outputs.pr }}
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const {execFileSync} = require('node:child_process');
+          const env = process.env;
+          const output = (key, value) => fs.appendFileSync(env.GITHUB_OUTPUT, `${key}=${value}\n`);
+          const validTag = value => /^v\d+\.\d+\.\d+$/.test(value || '');
+          const validSha = value => /^[a-f0-9]{40}$/.test(value || '');
+          if (env.GITHUB_EVENT_NAME === 'workflow_dispatch') {
+            const tag = env.GITHUB_REF?.replace(/^refs\/tags\//, '');
+            if (!env.GITHUB_REF?.startsWith('refs/tags/') || !validTag(tag) || !validSha(env.GITHUB_SHA)) {
+              throw Error('Manual recovery must be dispatched on an existing version tag, for example --ref v0.1.1');
+            }
+            output('run', 'true'); output('tag', tag); output('sha', env.GITHUB_SHA);
+            output('mode', 'manual'); output('created', 'false');
+          } else if (env.GITHUB_EVENT_NAME === 'push' && env.GITHUB_REF === 'refs/heads/main') {
+            if (env.RELEASE_CREATED === 'true') {
+              if (!validTag(env.AUTOMATIC_TAG) || !validSha(env.AUTOMATIC_SHA)) throw Error('Invalid release-please release output');
+              output('run', 'true'); output('tag', env.AUTOMATIC_TAG); output('sha', env.AUTOMATIC_SHA);
+              output('mode', 'automatic'); output('created', 'true');
+            } else {
+              output('run', 'false');
+            }
+            if (env.RELEASE_PR) {
+              const emitted = JSON.parse(env.RELEASE_PR);
+              if (!Number.isSafeInteger(emitted.number) || emitted.number < 1) throw Error('Invalid release PR number');
+              const pr = JSON.parse(execFileSync('gh', ['api', `repos/${env.GITHUB_REPOSITORY}/pulls/${emitted.number}`], {encoding: 'utf8'}));
+              if (pr.state !== 'open' || pr.user.login !== 'github-actions[bot]' ||
+                  pr.head.repo?.full_name !== env.GITHUB_REPOSITORY || pr.base.repo?.full_name !== env.GITHUB_REPOSITORY ||
+                  pr.base.ref !== 'main' || pr.head.ref !== emitted.headBranchName ||
+                  pr.head.ref !== 'release-please--branches--main' || !validSha(pr.head.sha)) {
+                throw Error('Refusing to validate an unexpected release PR');
+              }
+              output('pr_sha', pr.head.sha);
+              fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `Release PR #${emitted.number}: CI will validate commit ${pr.head.sha}. Review and merge remain manual.\n`);
+            }
+          } else {
+            throw Error('Unsupported release workflow event');
+          }
+          NODE
+  release-pr-test:
+    needs: prepare
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.pr_sha != '' }}
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.pr_sha }}
+    permissions:
+      contents: read
+  release-pr-status:
+    needs: [prepare, release-pr-test]
+    if: always() && needs.prepare.outputs.pr_sha != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - name: Report tested release PR commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_SHA: ${{ needs.prepare.outputs.pr_sha }}
+          TEST_RESULT: ${{ needs.release-pr-test.result }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const {execFileSync} = require('node:child_process');
+          const env = process.env;
+          if (!/^[a-f0-9]{40}$/.test(env.PR_SHA || '')) throw Error('Invalid tested PR commit');
+          const state = env.TEST_RESULT === 'success' ? 'success' : env.TEST_RESULT === 'failure' ? 'failure' : 'error';
+          const target = `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`;
+          execFileSync('gh', ['api', '--method', 'POST', `repos/${env.GITHUB_REPOSITORY}/statuses/${env.PR_SHA}`,
+            '--field', `state=${state}`, '--field', 'context=release-pr/ci',
+            '--field', `description=Release PR validation: ${env.TEST_RESULT}`,
+            '--field', `target_url=${target}`], {stdio: 'inherit'});
+          NODE
+  validate:
+    needs: prepare
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.prepare.outputs.run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+      RELEASE_MODE: ${{ needs.prepare.outputs.mode }}
+      RELEASE_CREATED: ${{ needs.prepare.outputs.created }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -22,21 +151,31 @@ jobs:
           package-manager-cache: false
       - run: npm run check:release
   test:
-    needs: validate
+    needs: [prepare, validate]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.validate.result == 'success' }}
     uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
     permissions:
       contents: read
   publish:
-    needs: [validate, test]
+    needs: [prepare, validate, test]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' && needs.validate.result == 'success' && needs.test.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: npm
     permissions:
       contents: read
       id-token: write
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+      RELEASE_MODE: ${{ needs.prepare.outputs.mode }}
+      RELEASE_CREATED: ${{ needs.prepare.outputs.created }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -54,4 +193,4 @@ jobs:
           PACKAGE_OUTPUT: ${{ runner.temp }}/release.tgz
       - run: npm run check:release
       - name: Publish verified tarball using npm trusted publishing
-        run: npm publish "$RUNNER_TEMP/release.tgz" --access public --provenance --ignore-scripts
+        run: node scripts/publish-package.mjs "$RUNNER_TEMP/release.tgz"

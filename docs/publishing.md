@@ -1,38 +1,56 @@
 # 发布与上架
 
-仓库：[shiyang1026/magpie-claude-science](https://github.com/shiyang1026/magpie-claude-science)。本地改动由维护者自行 review、commit 和 push。下列命令是操作说明，不代表已经发布。
+仓库：[shiyang1026/magpie-claude-science](https://github.com/shiyang1026/magpie-claude-science)。npm 首版 `0.1.0` 已发布，后续通过 Release Please 管理版本。
 
-## 已准备的 CI/CD
+## 日常发布
 
-| 流程 | 触发方式 | 检查内容 |
-| --- | --- | --- |
-| CI | main 分支 push、PR、手动触发 | Node 22/24 × Ubuntu/macOS，单元与受管服务集成测试 |
-| 打包检查 | 每次 CI | 文件白名单、真实 tarball 安装、复制独立运行版本；删除原 npm 安装后仍可执行 CLI |
-| Magpie 集成 | 每次 CI | 固定 Magpie 0.1.1219 CLI，SHA-256 校验，Bun 1.4.3，隔离 HOME 和模拟上游 |
-| npm 发布 | 仅手动、版本标签 | 仓库、标签、版本、commit 与干净工作区校验；重新跑 CI；npm 环境审批；OIDC 发布已验证的 tarball |
-
-发布流程没有 npm token secret，也没有自动执行的安装脚本。GitHub Actions 使用固定 commit SHA，PR 测试仅有读取权限。社区插件详情中的点击安装仍不会代替后台服务的显式初始化。
-
-## 第一次把代码推到 GitHub
-
-完成本地检查：
-
-```sh
-npm ci --ignore-scripts
-npm test
-npm run check:package
-npm run test:integration
+```text
+提交 feat / fix 到 main
+  → Release Please 更新发布 PR（版本、lockfile、CHANGELOG）
+  → 自动测试发布 PR 的精确提交
+  → 维护者审核并合并发布 PR
+  → 创建版本标签与 GitHub Release
+  → 测试该版本 → npm 环境审批 → OIDC 发布并核对 registry
 ```
 
-最后一项需要安装 Magpie 和 Bun，或设置 `MAGPIE_BIN`、`MAGPIE_BUN`。确认待提交文件不含 `work/`、凭证或忽略的开发记录，再由维护者创建提交并推送到 `main`。当前本地分支如仍叫 `prototype`，可先自行改名为 `main`。
+发布 PR 标题使用 `chore(release): 发布 <版本>`。普通提交不会立即发布 npm；不要手工合并未经验证的发布 PR。当前保留 npm 环境审批，审批人是仓库所有者。
 
-推送后，进入仓库 **Actions → CI**，确认所有矩阵与集成任务通过。本地测试不能替代首次云端执行结果。
+自动生成的 PR 使用 `GITHUB_TOKEN`，不会触发普通的 PR 工作流。因此 `release.yml` 显式测试经过来源校验的机器人 PR，并把 `release-pr/ci` 状态回报到对应的 PR 提交。若以后配置分支保护，可把这个状态作为发布 PR 的必需检查。
 
-## 配置 npm 可信发布
+## CI/CD 的检查
 
-首次发布前需由包所有者完成 npm 账号与包初始化；这部分不会由本项目工作流代办。首次包引导可按 npm 当前官方流程完成，已有包直接在设置中添加 GitHub Actions Trusted Publisher。
+| 流程 | 检查内容 |
+| --- | --- |
+| 常规 CI | main push、PR、手动触发；Node 22/24 × Ubuntu/macOS |
+| 打包检查 | 白名单、tarball 安装、独立运行目录；删除原 npm 安装后 CLI 仍可运行 |
+| Magpie 集成 | 固定 0.1.1219 CLI 与 SHA-256，Bun 1.4.3，隔离 HOME 和模拟上游 |
+| 发布校验 | 个人源仓库、版本标签、checkout 与触发提交一致、干净工作区 |
+| 发布确认 | OIDC、provenance、npm 环境审批、registry 可见性及 tarball SHA-512 一致性 |
 
-配置字段：
+自动发布要求 Release Please 的发布提交与触发 workflow 的 main 提交完全相同，避免 provenance 把包错误关联到其他提交。需要补发旧标签时使用下方的手动恢复入口。
+
+同一个 `release.yml` 同时处理版本创建与 npm 发布，避免机器人创建的 tag/Release 不触发另一个工作流的问题。没有 npm token secret，也没有自动安装后台服务的 postinstall 脚本。
+
+## 手动恢复
+
+若某版本发布失败，先检查 Actions 日志。不要修改已经发布的同一版本的内容。
+
+```sh
+gh workflow run release.yml --repo shiyang1026/magpie-claude-science --ref v0.1.1
+```
+
+将示例替换为实际要恢复的标签。新版流程会检查已公开版本的完整性：相同 tarball 已发布则跳过上传，内容不一致则拒绝。上传成功后等待 registry 可查询；超过等待时间会报告未确认，而不是仅凭命令退出码声称可安装。
+
+较早的 `v0.1.0` 标签仍包含首版手动工作流；按旧标签运行会使用其当时的工作流。旧版本补发不应强行覆盖较新的 `latest`，需要另行安排 dist-tag。
+
+## 首次配置或 fork
+
+1. 安装依赖并运行 `npm test`、`npm run check:package`、`npm run test:integration`。
+2. 在自己的仓库启用 Actions 创建 PR 的权限；工作流的默认权限仍保持 read，只有版本管理任务获得必要写权限。
+3. 配置 `npm` 环境审批，允许 `main` 分支及 `v*` 标签部署。
+4. 在 npm 完成包初始化、2FA 和 Trusted Publisher 配置；改用自己的仓库时，同步更新工作流及 release-check 的源仓库限制。
+
+当前可信发布配置：
 
 | 字段 | 值 |
 | --- | --- |
@@ -40,38 +58,22 @@ npm run test:integration
 | Repository | `magpie-claude-science` |
 | Workflow filename | `release.yml` |
 | Environment | `npm` |
-| Allowed action | 明确允许直接 publish（不能只允许 stage） |
+| Allowed action | 允许直接 publish |
 
-先确认 npm 包名可用且你拥有发布权限。按当前 npm 文档，新配置需及时完成首次发布，不要过早配置后长期闲置。工作流使用 Node 24 并检查 npm ≥11.5.1。
+工作流使用 Node 24，并检查 npm ≥11.5.1。新增 Trusted Publisher 要及时完成首次发布，具体时限以 npm 当前文档为准。
 
-GitHub 的 `npm` 环境已配置 `shiyang1026` 为审批人，部署标签限定 `v*`。后续其他人 fork 项目时，需要自行配置环境审批、发布身份，并更新工作流及 release-check 中固定的源仓库校验。
+## 仓库展示与 Magpie 收录
 
-## 发布一个版本
+- npmjs.com 的包通过 README npm 徽章展示；GitHub Packages 是另一套 registry，不会自动同步 npmjs.com 的发布。
+- GitHub Releases 展示版本和更新日志，由 Release Please 创建；不需要为了 Packages 栏额外维护双 registry。
+- 公开仓库添加 `magpie-plugin` topic 后，可进入 Magpie 的非官方 GitHub 发现入口。
+- 社区推荐需向 [magpie-community/plugins](https://github.com/magpie-community/plugins) 提交包、测试、中英说明和 `registry.json` 条目，申请 `kind: "agent"`。维护者决定是否收录及后台服务的分发方式。
 
-1. 更新版本及 lockfile，review、commit 并 push；确认 main 的 CI 通过。
-2. 创建与版本完全一致的标签，例如 `v0.1.0`，并 push 标签。
-3. 在该标签上手动运行发布工作流：
-
-```sh
-gh workflow run release.yml --repo shiyang1026/magpie-claude-science --ref v0.1.0
-```
-
-4. 等验证与 CI 完成，在 GitHub 审批 `npm` 环境。工作流随后发布经过安装及独立部署检查的同一 tarball。
-5. 核对 npm 页面和安装行为，再通知使用者更新。
-
-普通 push 或创建标签都不会自动发布。工作流不会替维护者创建标签、提交源码或生成 GitHub Release。
-
-## 进入 Magpie 的发现页
-
-- **非官方 GitHub 入口**：公开仓库添加 `magpie-plugin` topic；根目录包含 `package.json` 及可加载代码。fork、归档仓库不会进入该列表。
-- **社区推荐**：向 [magpie-community/plugins](https://github.com/magpie-community/plugins) 提交包、测试、中英说明及 `registry.json` 条目，申请 `kind: "agent"`。是否收录及后台服务的分发方式需由维护者认可。
-- **社区维护包**：`@magpie-community/…` 命名空间由社区管理，不能自行声明社区身份；首版发布和后续自动更新按其贡献流程处理。
-
-本项目是 Agent 接入插件。发现页的“订阅”分组指模型供应商套餐，不是用户关注或订阅插件更新的入口。
+本项目是 Agent 接入插件，发现页的“订阅”指供应商套餐。仅在 Magpie 点击安装插件不能代替首次后台服务初始化。
 
 ## 参考
 
-- [Magpie 插件开发与发布](https://usemagpie.ai/docs/zh/plugins)
-- [社区 Market 流程](https://github.com/magpie-community/plugins#the-market)
+- [Release Please](https://github.com/googleapis/release-please-action)
+- [Magpie 插件文档](https://usemagpie.ai/docs/zh/plugins)
 - [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)
-- [npm provenance](https://docs.npmjs.com/generating-provenance-statements/)
+- [GitHub Packages 的 npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry)

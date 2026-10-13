@@ -2,6 +2,10 @@
 
 [English](README.md) · 简体中文
 
+[![npm](https://img.shields.io/npm/v/magpie-claude-science)](https://www.npmjs.com/package/magpie-claude-science)
+[![CI](https://github.com/shiyang1026/magpie-claude-science/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shiyang1026/magpie-claude-science/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/shiyang1026/magpie-claude-science)](https://github.com/shiyang1026/magpie-claude-science/releases)
+
 在 Claude Science 中使用 Magpie 的模型，保留原来的 macOS App 图标。在 **Magpie → Agent → Claude Science** 中选择模型，然后照常打开 Science。
 
 **实验版。** 包含 Agent 插件、限定作用范围的 middleware，以及需要明确安装的后台服务，无需 CSP。已验证 Science **0.1.60**、Magpie **0.1.1219**。
@@ -57,7 +61,7 @@ npm run check:package
 npm run test:integration  # 需要 Magpie 和 Bun；使用隔离目录和模拟上游
 ```
 
-CI 覆盖 Node 22/24 × Linux/macOS、打包后安装及独立部署检查，以及固定版本的 Magpie 集成测试。npm 发布需在匹配版本的标签上手动触发、通过 CI，并获得 `npm` 环境审批；普通 push 不会发布。详见[发布配置](docs/publishing.md)。
+CI 覆盖 Node 22/24 × Linux/macOS、打包部署检查及固定版本的 Magpie 集成。Release Please 根据规范提交生成版本号和 [CHANGELOG](CHANGELOG.md) 的发布 PR。你审核合并后，同一工作流创建 GitHub Release、测试对应提交，并等待 `npm` 环境审批后通过 OIDC 发布。保留按版本标签手动触发的恢复入口。详见[发布配置](docs/publishing.md)。
 
 通过 [Issues](https://github.com/shiyang1026/magpie-claude-science/issues) 反馈问题，请附版本、`doctor` 输出和复现步骤，不要附带凭证或私人日志。更多内容：[运维说明](docs/operations.zh-CN.md)、[Magpie 文档](https://usemagpie.ai/docs/zh/plugins)。
 
