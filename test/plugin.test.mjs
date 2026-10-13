@@ -82,6 +82,17 @@ test('valid direct target requests remain unchanged and need no echo restoration
   assert.deepEqual(onRequest(body, ctx), body);
   assert.deepEqual(ctx.state, {});
 });
+test('bridge-selected models pass through without plugin model options after a source switch', () => {
+  requireHooks();
+  for (const options of [undefined, {}, { agent: 'claude-science' }, { model: '' }, { model: 'codex/old-model' }]) {
+    const ctx = context({ options });
+    const body = { model: 'codex/gpt-6.1-sol', messages: [{ role: 'user', content: '123' }] };
+    const expected = structuredClone(body);
+    assert.deepEqual(onRequest(body, ctx), expected);
+    assert.deepEqual(ctx.rejections, []);
+    assert.deepEqual(ctx.state, {});
+  }
+});
 test('streaming and nonstreaming responses restore each request alias independently', () => {
   requireHooks();
   const first = context(), second = context();

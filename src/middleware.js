@@ -18,16 +18,18 @@ function modelID(value) {
 
 export function onRequest(body, ctx) {
   if (!scoped(ctx)) return body;
-  const target = ctx.options && ctx.options.model;
-  if (!modelID(target) || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\/[a-zA-Z0-9]/.test(target)) {
-    ctx.reject(400, 'Claude Science requires a valid provider/model option.');
-    return body;
-  }
   if (!object(body) || !modelID(body.model)) {
     ctx.reject(400, 'Claude Science requires a valid request model.');
     return body;
   }
   if (body.model.startsWith('claude-')) {
+    // The bridge already selects a provider/model from the live Agent config.
+    // Plugin options are needed only for requests still using Claude aliases.
+    const target = ctx.options && ctx.options.model;
+    if (!modelID(target) || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*\/[a-zA-Z0-9]/.test(target)) {
+      ctx.reject(400, 'Claude Science requires a valid provider/model option.');
+      return body;
+    }
     ctx.state[ORIGINAL_MODEL] = body.model;
     body.model = target;
   }

@@ -142,6 +142,14 @@ try {
   const unknownAlias = await fetch(base + '/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer magpie-other-agent' }, body: JSON.stringify({ ...body, stream: false }) });
   assert.notEqual(unknownAlias.status, 200, 'Other agent alias must not be rewritten');
   await unknownAlias.text();
+  // Reinstalling from npm can leave no explicit options. The bridge already
+  // selects the model from the Agent config, so these requests must still work.
+  await cli(['plugin', 'options', 'magpie-claude-science', '{}']);
+  const direct = await request({ ...body, model: 'fake/luna', stream: false });
+  assert.equal(calls.at(-1).body.model, 'luna');
+  assert.equal(direct.content[0].type, 'tool_use');
+  const directStream = await request({ ...body, model: 'fake/luna' });
+  assert.match(directStream, /message_stop/);
   assert.doesNotMatch(logs, /middleware.*(didn't load|failed|onRequest.*error)/i);
   console.log('PASS: installed Magpie loads agent and middleware; isolated agent config; catalog; streaming tool deltas; nonstreaming alias echo; token counting; other-agent isolation.');
 } finally {
