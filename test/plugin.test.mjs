@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 // Missing exports are assertions during the first red run, rather than import errors.
 const agentModule = await import('../src/agent.js').catch(() => ({}));
 const middleware = await import('../src/middleware.js').catch(() => ({}));
+const { SCIENCE_ICON } = await import('../src/icon.js').catch(() => ({}));
 const { onRequest, onEvent, onResponse } = middleware;
 function context(overrides = {}) {
   const rejections = [];
@@ -18,7 +20,7 @@ function requireHooks() {
 test('agent declares the dedicated Science config and installed app', () => {
   assert.deepEqual(agentModule.agent, {
     id: 'claude-science', name: 'Claude Science', config: '~/.config/magpie/claude-science.json',
-    format: 'json', model: 'model', dir: '/Applications/Claude Science.app',
+    format: 'json', model: 'model', dir: '/Applications/Claude Science.app', icon: SCIENCE_ICON,
   });
 });
 test('connect returns flat Magpie-managed keys without changing its input', () => {
@@ -106,4 +108,19 @@ test('response hooks do not restore outside the matching agent and protocol', ()
     assert.deepEqual(onResponse(structuredClone(body), { ...ctx, ...overrides }), body);
     assert.deepEqual(onEvent({ type: 'message_start', message: structuredClone(body) }, { ...ctx, ...overrides }), { type: 'message_start', message: body });
   }
+});
+
+
+test('Science icon is an offline 128px PNG shared by agent and plugin metadata', () => {
+  assert.equal(typeof SCIENCE_ICON, 'string', 'SCIENCE_ICON must be exported');
+  assert.match(SCIENCE_ICON, /^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/);
+  const png = Buffer.from(SCIENCE_ICON.split(',')[1], 'base64');
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal(png.toString('ascii', 12, 16), 'IHDR');
+  assert.equal(png.readUInt32BE(16), 128);
+  assert.equal(png.readUInt32BE(20), 128);
+  assert.ok(Buffer.byteLength(SCIENCE_ICON) < 50000, 'Embedded icon should stay modest');
+  assert.equal(agentModule.agent.icon, SCIENCE_ICON);
+  const metadata = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(metadata.magpie.icon, SCIENCE_ICON);
 });

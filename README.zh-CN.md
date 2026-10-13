@@ -68,3 +68,5 @@ CI 覆盖 Node 22/24 × Linux/macOS、打包部署检查及固定版本的 Magpi
 ## 许可证
 
 [MIT](LICENSE)。独立社区项目，与 Anthropic、Magpie 无隶属关系。
+
+Claude Science 图标归原权利人所有，不适用本项目的 MIT 许可证。

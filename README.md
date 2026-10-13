@@ -68,3 +68,5 @@ Report bugs through [Issues](https://github.com/shiyang1026/magpie-claude-scienc
 ## License
 
 [MIT](LICENSE). Independent community project; not affiliated with Anthropic or Magpie.
+
+The Claude Science icon belongs to its respective owner and is excluded from the MIT license.
